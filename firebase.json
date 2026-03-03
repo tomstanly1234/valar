@@ -1,0 +1,39 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "nutritrack-66125",
+          "appId": "1:655679523222:android:8023a9bbf63c81ca83b5b7",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "nutritrack-66125",
+          "configurations": {
+            "android": "1:655679523222:android:8023a9bbf63c81ca83b5b7",
+            "ios": "1:655679523222:ios:3c2e69c5a052363083b5b7",
+            "macos": "1:655679523222:ios:3c2e69c5a052363083b5b7",
+            "web": "1:655679523222:web:640e5c191d27c90b83b5b7",
+            "windows": "1:655679523222:web:9ab7fcbea02dbada83b5b7"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
