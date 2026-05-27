@@ -1,112 +1,139 @@
+// lib/screens/growth_analysis_screen.dart
+// WHO (0–10 years) + CDC (10–18 years) percentile data
+// All ages stored and displayed in MONTHS (max 216 = 18 years)
+
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../services/firestore_service.dart';
 
-// ── WHO Percentile Data ────────────────────────────────────────────────────
-// Source: WHO Child Growth Standards (boys & girls, 0–60 months)
-// Columns: month → [3rd, 15th, 50th, 85th, 97th] percentile
+// ── Reference Data ─────────────────────────────────────────────────────────
+// Format: month → [P3, P15, P50, P85, P97]
+// Sources: WHO Child Growth Standards (0–60m), WHO 5–19 years,
+//          CDC Growth Charts (extended to 216m / 18 years)
 
-class _WhoData {
-  // Weight-for-age BOYS (kg)
+class _RefData {
+
+  // ── Weight-for-Age BOYS (kg) ──────────────────────────────────────────
   static const Map<int, List<double>> weightBoys = {
-    0:  [2.5, 2.9, 3.3, 3.9, 4.4],
-    1:  [3.4, 3.9, 4.5, 5.1, 5.7],
-    2:  [4.3, 4.9, 5.6, 6.3, 7.1],
-    3:  [5.0, 5.7, 6.4, 7.2, 8.0],
-    4:  [5.6, 6.2, 7.0, 7.8, 8.7],
-    5:  [6.0, 6.7, 7.5, 8.4, 9.3],
-    6:  [6.4, 7.1, 7.9, 8.8, 9.8],
-    9:  [7.1, 7.9, 8.9, 9.9, 11.0],
-    12: [7.8, 8.6, 9.6, 10.8, 12.0],
-    15: [8.4, 9.2, 10.3, 11.5, 12.8],
-    18: [8.8, 9.7, 10.9, 12.2, 13.6],
-    24: [9.7, 10.8, 12.2, 13.6, 15.3],
-    30: [10.5, 11.5, 13.0, 14.6, 16.4],
-    36: [11.2, 12.4, 14.0, 15.8, 17.8],
-    42: [11.9, 13.2, 15.0, 16.9, 19.1],
-    48: [12.7, 14.1, 16.0, 18.1, 20.5],
-    54: [13.4, 14.9, 17.0, 19.3, 21.9],
-    60: [14.1, 15.7, 18.0, 20.5, 23.2],
+    0:   [2.5,  2.9,  3.3,  3.9,  4.4],
+    1:   [3.4,  3.9,  4.5,  5.1,  5.7],
+    2:   [4.3,  4.9,  5.6,  6.3,  7.1],
+    3:   [5.0,  5.7,  6.4,  7.2,  8.0],
+    6:   [6.4,  7.1,  7.9,  8.8,  9.8],
+    9:   [7.1,  7.9,  8.9,  9.9,  11.0],
+    12:  [7.8,  8.6,  9.6,  10.8, 12.0],
+    18:  [8.8,  9.7,  10.9, 12.2, 13.6],
+    24:  [9.7,  10.8, 12.2, 13.6, 15.3],
+    36:  [11.2, 12.4, 14.0, 15.8, 17.8],
+    48:  [12.7, 14.1, 16.0, 18.1, 20.5],
+    60:  [14.1, 15.7, 18.0, 20.5, 23.2],
+    72:  [15.5, 17.4, 20.1, 23.2, 26.8],
+    84:  [17.0, 19.2, 22.4, 26.2, 30.8],
+    96:  [18.6, 21.2, 25.0, 29.7, 35.6],
+    108: [20.3, 23.3, 28.0, 33.8, 41.2],
+    120: [22.1, 25.7, 31.4, 38.7, 47.9],
+    132: [24.4, 28.6, 35.5, 44.6, 56.0],
+    144: [27.3, 32.4, 40.7, 52.0, 65.9],
+    156: [31.2, 37.5, 47.3, 60.5, 76.8],
+    168: [36.0, 43.6, 54.7, 69.3, 87.2],
+    180: [41.2, 49.8, 61.9, 77.5, 96.0],
+    192: [45.9, 55.4, 67.8, 84.0, 102.5],
+    204: [49.3, 59.3, 72.0, 88.7, 107.0],
+    216: [51.5, 62.0, 74.8, 91.8, 110.0],
   };
 
-  // Weight-for-age GIRLS (kg)
+  // ── Weight-for-Age GIRLS (kg) ─────────────────────────────────────────
   static const Map<int, List<double>> weightGirls = {
-    0:  [2.4, 2.8, 3.2, 3.7, 4.2],
-    1:  [3.2, 3.6, 4.2, 4.8, 5.5],
-    2:  [3.9, 4.5, 5.1, 5.8, 6.6],
-    3:  [4.5, 5.2, 5.8, 6.6, 7.5],
-    4:  [5.0, 5.7, 6.4, 7.3, 8.2],
-    5:  [5.4, 6.1, 6.9, 7.8, 8.8],
-    6:  [5.7, 6.5, 7.3, 8.2, 9.3],
-    9:  [6.4, 7.3, 8.2, 9.3, 10.6],
-    12: [7.0, 8.0, 9.0, 10.2, 11.5],
-    15: [7.6, 8.6, 9.7, 11.0, 12.4],
-    18: [8.1, 9.1, 10.2, 11.6, 13.2],
-    24: [9.0, 10.2, 11.5, 13.2, 15.1],
-    30: [9.8, 11.0, 12.5, 14.3, 16.4],
-    36: [10.5, 11.8, 13.5, 15.5, 17.8],
-    42: [11.2, 12.6, 14.5, 16.7, 19.2],
-    48: [11.9, 13.5, 15.5, 17.9, 20.7],
-    54: [12.6, 14.3, 16.5, 19.2, 22.2],
-    60: [13.3, 15.2, 17.5, 20.4, 23.7],
+    0:   [2.4,  2.8,  3.2,  3.7,  4.2],
+    1:   [3.2,  3.6,  4.2,  4.8,  5.5],
+    2:   [3.9,  4.5,  5.1,  5.8,  6.6],
+    3:   [4.5,  5.2,  5.8,  6.6,  7.5],
+    6:   [5.7,  6.5,  7.3,  8.2,  9.3],
+    9:   [6.4,  7.3,  8.2,  9.3,  10.6],
+    12:  [7.0,  8.0,  9.0,  10.2, 11.5],
+    18:  [8.1,  9.1,  10.2, 11.6, 13.2],
+    24:  [9.0,  10.2, 11.5, 13.2, 15.1],
+    36:  [10.5, 11.8, 13.5, 15.5, 17.8],
+    48:  [11.9, 13.5, 15.5, 17.9, 20.7],
+    60:  [13.3, 15.2, 17.5, 20.4, 23.7],
+    72:  [14.7, 16.9, 19.7, 23.3, 27.8],
+    84:  [16.2, 18.8, 22.2, 26.7, 32.8],
+    96:  [17.8, 20.9, 25.0, 30.7, 38.7],
+    108: [19.6, 23.3, 28.2, 35.3, 45.7],
+    120: [21.8, 26.1, 32.0, 40.7, 53.8],
+    132: [24.6, 29.7, 36.8, 47.4, 62.8],
+    144: [28.3, 34.3, 42.5, 55.1, 72.5],
+    156: [33.0, 39.7, 48.7, 63.0, 82.0],
+    168: [38.0, 45.3, 55.0, 70.5, 90.5],
+    180: [42.0, 49.8, 59.4, 75.5, 96.0],
+    192: [44.5, 52.5, 62.0, 78.5, 99.0],
+    204: [46.0, 54.0, 63.5, 80.0, 101.0],
+    216: [46.8, 55.0, 64.6, 81.0, 102.0],
   };
 
-  // Height-for-age BOYS (cm)
+  // ── Height-for-Age BOYS (cm) ──────────────────────────────────────────
   static const Map<int, List<double>> heightBoys = {
-    0:  [46.1, 48.0, 49.9, 51.8, 53.7],
-    1:  [50.8, 52.8, 54.7, 56.7, 58.6],
-    2:  [54.4, 56.4, 58.4, 60.4, 62.4],
-    3:  [57.3, 59.4, 61.4, 63.5, 65.5],
-    4:  [59.7, 61.8, 63.9, 66.0, 68.0],
-    5:  [61.7, 63.8, 65.9, 68.0, 70.1],
-    6:  [63.3, 65.5, 67.6, 69.8, 71.9],
-    9:  [68.0, 70.1, 72.3, 74.5, 76.7],
-    12: [71.7, 73.9, 75.7, 77.7, 79.8],
-    15: [75.0, 77.3, 79.1, 81.2, 83.4],
-    18: [78.3, 80.5, 82.3, 84.4, 86.7],
-    24: [83.5, 85.8, 87.8, 90.0, 92.3],
-    30: [88.0, 90.4, 92.7, 95.0, 97.4],
-    36: [91.8, 94.2, 96.1, 98.5, 101.0],
-    42: [95.3, 97.7, 99.9, 102.3, 104.8],
-    48: [98.5, 101.0, 103.3, 105.7, 108.2],
-    54: [101.5, 104.0, 106.4, 108.9, 111.5],
-    60: [104.0, 107.0, 110.0, 113.0, 116.0],
+    0:   [46.1, 48.0, 49.9, 51.8, 53.7],
+    1:   [50.8, 52.8, 54.7, 56.7, 58.6],
+    2:   [54.4, 56.4, 58.4, 60.4, 62.4],
+    3:   [57.3, 59.4, 61.4, 63.5, 65.5],
+    6:   [63.3, 65.5, 67.6, 69.8, 71.9],
+    9:   [68.0, 70.1, 72.3, 74.5, 76.7],
+    12:  [71.7, 73.9, 75.7, 77.7, 79.8],
+    18:  [78.3, 80.5, 82.3, 84.4, 86.7],
+    24:  [83.5, 85.8, 87.8, 90.0, 92.3],
+    36:  [91.8, 94.2, 96.1, 98.5, 101.0],
+    48:  [98.5, 101.0,103.3,105.7,108.2],
+    60:  [104.0,107.0,110.0,113.0,116.0],
+    72:  [109.5,112.5,116.0,119.5,123.0],
+    84:  [114.5,118.0,121.7,125.5,129.5],
+    96:  [119.5,123.2,127.3,131.5,136.0],
+    108: [124.0,128.0,132.6,137.2,142.2],
+    120: [128.5,132.7,137.5,143.0,148.5],
+    132: [133.0,137.5,142.8,149.0,155.0],
+    144: [137.5,142.8,148.5,155.5,162.5],
+    156: [143.0,149.0,155.5,163.0,170.5],
+    168: [150.5,157.0,163.8,170.8,177.8],
+    180: [158.0,163.8,169.8,176.2,182.5],
+    192: [162.0,167.0,173.0,179.0,185.0],
+    204: [163.5,168.5,174.5,180.5,186.5],
+    216: [164.0,169.0,175.3,181.5,187.5],
   };
 
-  // Height-for-age GIRLS (cm)
+  // ── Height-for-Age GIRLS (cm) ─────────────────────────────────────────
   static const Map<int, List<double>> heightGirls = {
-    0:  [45.6, 47.3, 49.1, 51.0, 52.9],
-    1:  [50.0, 51.8, 53.7, 55.6, 57.4],
-    2:  [53.2, 55.2, 57.1, 59.1, 61.1],
-    3:  [55.8, 57.9, 59.8, 61.9, 63.9],
-    4:  [58.0, 60.1, 62.1, 64.1, 66.2],
-    5:  [59.9, 62.0, 64.0, 66.1, 68.2],
-    6:  [61.5, 63.7, 65.7, 67.9, 70.0],
-    9:  [66.3, 68.4, 70.5, 72.6, 74.7],
-    12: [70.0, 72.0, 74.0, 76.1, 78.1],
-    15: [73.3, 75.5, 77.5, 79.7, 81.8],
-    18: [76.7, 78.8, 80.7, 83.0, 85.2],
-    24: [82.1, 84.2, 86.4, 88.7, 91.0],
-    30: [86.8, 89.1, 91.4, 93.8, 96.2],
-    36: [90.7, 93.0, 95.1, 97.6, 100.0],
-    42: [94.4, 96.8, 98.7, 101.4, 103.9],
-    48: [97.9, 100.3, 102.7, 105.3, 107.9],
-    54: [101.2, 103.8, 106.2, 108.9, 111.5],
-    60: [104.2, 107.0, 109.4, 112.2, 115.0],
+    0:   [45.6, 47.3, 49.1, 51.0, 52.9],
+    1:   [50.0, 51.8, 53.7, 55.6, 57.4],
+    2:   [53.2, 55.2, 57.1, 59.1, 61.1],
+    3:   [55.8, 57.9, 59.8, 61.9, 63.9],
+    6:   [61.5, 63.7, 65.7, 67.9, 70.0],
+    9:   [66.3, 68.4, 70.5, 72.6, 74.7],
+    12:  [70.0, 72.0, 74.0, 76.1, 78.1],
+    18:  [76.7, 78.8, 80.7, 83.0, 85.2],
+    24:  [82.1, 84.2, 86.4, 88.7, 91.0],
+    36:  [90.7, 93.0, 95.1, 97.6, 100.0],
+    48:  [97.9, 100.3,102.7,105.3,107.9],
+    60:  [104.2,107.0,109.4,112.2,115.0],
+    72:  [109.5,112.3,115.1,118.0,121.0],
+    84:  [114.5,117.5,120.6,123.8,127.2],
+    96:  [119.5,122.8,126.2,129.8,133.7],
+    108: [124.5,128.0,131.8,135.7,140.0],
+    120: [129.5,133.5,137.8,142.2,147.0],
+    132: [135.0,139.5,144.3,149.2,154.5],
+    144: [141.5,146.2,151.2,156.5,162.0],
+    156: [147.5,152.0,156.8,162.0,167.5],
+    168: [151.0,155.3,159.8,164.8,170.0],
+    180: [152.5,156.5,161.0,166.0,171.5],
+    192: [153.0,157.0,161.5,166.5,172.0],
+    204: [153.2,157.2,161.8,166.8,172.2],
+    216: [153.3,157.3,162.0,167.0,172.5],
   };
 
-  // ── WHO Clinical Classification ─────────────────────────────────────────
-  // Based on WHO Child Growth Standards Z-score cutoffs:
-  //   < P3   ≈ < −2 SD  → clinical action required
-  //   P3–P15 ≈ −2 to −1 SD → monitor
-  //   P15–P85 ≈ −1 to +1 SD → normal
-  //   P85–P97 ≈ +1 to +2 SD → monitor
-  //   > P97  ≈ > +2 SD  → clinical review
-
-  /// Returns 0–5 band index (0=<P3, 5=>P97)
-  static int _bandIndex(int month, double value, Map<int, List<double>> table) {
-    final cm = table.keys
-        .reduce((a, b) => (a - month).abs() < (b - month).abs() ? a : b);
+  // ── Band index helper (0=<P3 … 5=>P97) ───────────────────────────────
+  static int bandIndex(
+      int month, double value, Map<int, List<double>> table) {
+    final cm = table.keys.reduce(
+        (a, b) => (a - month).abs() < (b - month).abs() ? a : b);
     final bands = table[cm]!;
     if (value < bands[0]) return 0;
     if (value < bands[1]) return 1;
@@ -116,9 +143,17 @@ class _WhoData {
     return 5;
   }
 
-  /// WHO Weight-for-Age classification (WAZ)
-  static String weightForAgeLabel(int month, double value, bool isBoy) {
-    switch (_bandIndex(month, value, isBoy ? weightBoys : weightGirls)) {
+  static String bandString(int band) {
+    const labels = [
+      "< P3", "P3–P15", "P15–P50", "P50–P85", "P85–P97", "> P97"
+    ];
+    return labels[band.clamp(0, 5)];
+  }
+
+  // ── WHO Clinical Terms ────────────────────────────────────────────────
+  static String weightTerm(int month, double value, bool isBoy) {
+    switch (bandIndex(
+        month, value, isBoy ? weightBoys : weightGirls)) {
       case 0: return "Severely Underweight";
       case 1: return "Underweight";
       case 2: return "Normal Weight";
@@ -128,9 +163,9 @@ class _WhoData {
     }
   }
 
-  /// WHO Height/Length-for-Age classification (HAZ)
-  static String heightForAgeLabel(int month, double value, bool isBoy) {
-    switch (_bandIndex(month, value, isBoy ? heightBoys : heightGirls)) {
+  static String heightTerm(int month, double value, bool isBoy) {
+    switch (bandIndex(
+        month, value, isBoy ? heightBoys : heightGirls)) {
       case 0: return "Severely Stunted";
       case 1: return "Stunted";
       case 2: return "Normal Height";
@@ -140,44 +175,38 @@ class _WhoData {
     }
   }
 
-  /// Percentile band string for chart labels
-  static String weightPercentileLabel(int month, double value, bool isBoy) =>
-      _bandString(_bandIndex(month, value, isBoy ? weightBoys : weightGirls));
+  static String weightBand(int month, double value, bool isBoy) =>
+      bandString(bandIndex(
+          month, value, isBoy ? weightBoys : weightGirls));
 
-  static String heightPercentileLabel(int month, double value, bool isBoy) =>
-      _bandString(_bandIndex(month, value, isBoy ? heightBoys : heightGirls));
+  static String heightBand(int month, double value, bool isBoy) =>
+      bandString(bandIndex(
+          month, value, isBoy ? heightBoys : heightGirls));
 
-  static String _bandString(int band) {
-    const labels = ["< P3", "P3–P15", "P15–P50", "P50–P85", "P85–P97", "> P97"];
-    return labels[band.clamp(0, 5)];
-  }
-
-  /// WHO traffic-light color coding
-  static Color percentileColor(String whoTerm) {
-    switch (whoTerm) {
+  static Color termColor(String term) {
+    switch (term) {
       case "Severely Underweight":
       case "Severely Stunted":
-        return Colors.red.shade800;
+        return const Color(0xFFC62828);
       case "Underweight":
       case "Stunted":
-        return Colors.orange.shade800;
+        return const Color(0xFFE65100);
       case "Normal Weight":
       case "Normal Height":
-        return Colors.green.shade700;
+        return const Color(0xFF2E7D32);
       case "Risk of Overweight":
       case "Tall":
-        return Colors.orange.shade700;
+        return const Color(0xFFE65100);
       case "Overweight":
       case "Very Tall":
-        return Colors.blue.shade700;
+        return const Color(0xFF1565C0);
       default:
         return Colors.grey;
     }
   }
 
-  /// Clinical advice per WHO term
-  static String percentileInterpretation(String whoTerm) {
-    switch (whoTerm) {
+  static String termAdvice(String term) {
+    switch (term) {
       case "Severely Underweight":
         return "Urgent: seek medical attention immediately";
       case "Underweight":
@@ -203,14 +232,23 @@ class _WhoData {
     }
   }
 
-  /// Builds sorted FlSpots for a given percentile index (0=P3 … 4=P97).
-  static List<FlSpot> spotsForPercentile(
-      Map<int, List<double>> table, int index) {
+  static List<FlSpot> spotsForBand(
+      Map<int, List<double>> table, int idx) {
     return table.entries
-        .map((e) => FlSpot(e.key.toDouble(), e.value[index]))
+        .map((e) => FlSpot(e.key.toDouble(), e.value[idx]))
         .toList()
       ..sort((a, b) => a.x.compareTo(b.x));
   }
+}
+
+// ── Age label helper ──────────────────────────────────────────────────────
+String _ageLabel(int months) {
+  if (months == 0) return "Birth";
+  if (months < 12) return "${months}m";
+  final years = months ~/ 12;
+  final rem   = months % 12;
+  if (rem == 0) return "${years}y";
+  return "${years}y ${rem}m";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -247,8 +285,8 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     if (widget.initialRecords != null) {
-      records = widget.initialRecords!;
-      isLoading = false;
+      records    = widget.initialRecords!;
+      isLoading  = false;
     } else {
       fetchRecords();
     }
@@ -268,65 +306,33 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
       data.sort(
           (a, b) => (a["month"] as num).compareTo(b["month"] as num));
       setState(() {
-        records = data;
+        records   = data;
         isLoading = false;
       });
     } catch (e) {
       setState(() => isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error loading records: $e")),
-        );
+            SnackBar(content: Text("Error loading records: $e")));
       }
     }
   }
 
-  // ── Percentile band lines ────────────────────────────────────────────────
+  // ── Chart helpers ─────────────────────────────────────────────────────
 
-  /// Builds a faint percentile reference line.
-  LineChartBarData _percentileLine(
-    Map<int, List<double>> table,
-    int index,
-    Color color,
-  ) {
+  LineChartBarData _bandLine(
+      Map<int, List<double>> table, int idx, Color color) {
     return LineChartBarData(
       isCurved: true,
       color: color.withOpacity(0.55),
       barWidth: 1.2,
       dashArray: [4, 4],
-      spots: _WhoData.spotsForPercentile(table, index),
+      spots: _RefData.spotsForBand(table, idx),
       dotData: const FlDotData(show: false),
-      belowBarData: BarAreaData(show: false),
     );
   }
 
-  /// Shaded area between two percentile lines.
-  LineChartBarData _shadedBand(
-    Map<int, List<double>> table,
-    int lowerIndex,
-    int upperIndex,
-    Color fillColor,
-  ) {
-    final upperSpots = _WhoData.spotsForPercentile(table, upperIndex);
-    final lowerSpots = _WhoData.spotsForPercentile(table, lowerIndex);
-    return LineChartBarData(
-      isCurved: true,
-      color: Colors.transparent,
-      barWidth: 0,
-      spots: upperSpots,
-      dotData: const FlDotData(show: false),
-      belowBarData: BarAreaData(
-        show: true,
-        color: fillColor.withOpacity(0.12),
-        cutOffY: lowerSpots.first.y, // approximate lower boundary
-        applyCutOffY: false,
-      ),
-    );
-  }
-
-  /// The child's actual data line.
-  LineChartBarData _childLine(
-      List<FlSpot> spots, Color color) {
+  LineChartBarData _childLine(List<FlSpot> spots, Color color) {
     return LineChartBarData(
       isCurved: true,
       color: color,
@@ -334,7 +340,7 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
       spots: spots,
       dotData: FlDotData(
         show: true,
-        getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
+        getDotPainter: (s, _, __, ___) => FlDotCirclePainter(
           radius: 5,
           color: color,
           strokeWidth: 2,
@@ -356,149 +362,141 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
           (e["height"] as num).toDouble()))
       .toList();
 
-  // ── Full chart ───────────────────────────────────────────────────────────
-
-  Widget _buildChart({
-    required String type, // "weight" or "height"
-    required Color childColor,
-  }) {
-    final isWeight = type == "weight";
+  Widget _buildChart({required bool isWeight, required Color childColor}) {
     final table = isWeight
-        ? (_isBoy ? _WhoData.weightBoys : _WhoData.weightGirls)
-        : (_isBoy ? _WhoData.heightBoys : _WhoData.heightGirls);
+        ? (_isBoy ? _RefData.weightBoys : _RefData.weightGirls)
+        : (_isBoy ? _RefData.heightBoys : _RefData.heightGirls);
 
     final childSpots = isWeight ? _weightSpots() : _heightSpots();
 
+    // Y-axis range depends on type
+    final minY = isWeight ? 0.0  : 40.0;
+    final maxY = isWeight ? 120.0 : 225.0;
+
     final lines = <LineChartBarData>[
-      // Shaded bands (drawn first so child line sits on top)
-      _shadedBand(table, 0, 1, Colors.red),      // P3–P15  red tint
-      _shadedBand(table, 1, 3, Colors.green),    // P15–P85 green tint
-      _shadedBand(table, 3, 4, Colors.orange),   // P85–P97 orange tint
-
-      // Percentile lines
-      _percentileLine(table, 0, Colors.red),         // P3
-      _percentileLine(table, 1, Colors.orange),      // P15
-      _percentileLine(table, 2, Colors.green),       // P50  (median)
-      _percentileLine(table, 3, Colors.orange),      // P85
-      _percentileLine(table, 4, Colors.red),         // P97
-
-      // Child line (on top)
+      _bandLine(table, 0, Colors.red),
+      _bandLine(table, 1, Colors.orange),
+      _bandLine(table, 2, Colors.green),
+      _bandLine(table, 3, Colors.orange),
+      _bandLine(table, 4, Colors.red),
       if (childSpots.isNotEmpty) _childLine(childSpots, childColor),
     ];
 
-    return LineChart(
-      LineChartData(
-        minX: 0,
-        maxX: 60,
-        minY: isWeight ? 0 : 40,
-        maxY: isWeight ? 26 : 122,
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          getDrawingHorizontalLine: (v) =>
-              FlLine(color: Colors.grey.shade200, strokeWidth: 1),
-        ),
-        borderData:
-            FlBorderData(border: Border.all(color: Colors.grey.shade300)),
-        titlesData: FlTitlesData(
-          bottomTitles: AxisTitles(
-            axisNameWidget: const Text("Age (months)",
-                style: TextStyle(fontSize: 11, color: Colors.grey)),
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: 12,
-              getTitlesWidget: (v, _) => Text("${v.toInt()}",
-                  style: const TextStyle(fontSize: 10)),
-            ),
-          ),
-          leftTitles: AxisTitles(
-            axisNameWidget: Text(
-                isWeight ? "Weight (kg)" : "Height (cm)",
-                style:
-                    const TextStyle(fontSize: 11, color: Colors.grey)),
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: isWeight ? 5 : 20,
-              reservedSize: 36,
-              getTitlesWidget: (v, _) => Text("${v.toInt()}",
-                  style: const TextStyle(fontSize: 10)),
-            ),
-          ),
-          topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false)),
-        ),
-        lineBarsData: lines,
-        lineTouchData: LineTouchData(
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipItems: (touchedSpots) {
-              return touchedSpots.map((s) {
-                // Only label the child line (last in list)
-                if (s.barIndex == lines.length - 1) {
-                  return LineTooltipItem(
-                    isWeight
-                        ? "${s.y.toStringAsFixed(1)} kg"
-                        : "${s.y.toStringAsFixed(1)} cm",
-                    TextStyle(
-                        color: childColor, fontWeight: FontWeight.bold),
-                  );
-                }
-                return null;
-              }).toList();
+    return LineChart(LineChartData(
+      minX: 0,
+      maxX: 216, // 18 years
+      minY: minY,
+      maxY: maxY,
+      clipData: const FlClipData.all(),
+      gridData: FlGridData(
+        show: true,
+        drawVerticalLine: true,
+        verticalInterval: 24, // every 2 years
+        horizontalInterval: isWeight ? 20 : 25,
+        getDrawingHorizontalLine: (v) =>
+            FlLine(color: Colors.grey.shade200, strokeWidth: 1),
+        getDrawingVerticalLine: (v) =>
+            FlLine(color: Colors.grey.shade100, strokeWidth: 1),
+      ),
+      borderData: FlBorderData(
+          border: Border.all(color: Colors.grey.shade300)),
+      titlesData: FlTitlesData(
+        bottomTitles: AxisTitles(
+          axisNameWidget: const Text("Age",
+              style: TextStyle(fontSize: 11, color: Colors.grey)),
+          sideTitles: SideTitles(
+            showTitles: true,
+            interval: 24, // label every 2 years
+            reservedSize: 28,
+            getTitlesWidget: (v, _) {
+              final years = v ~/ 12;
+              return Text("${years}y",
+                  style: const TextStyle(fontSize: 9));
             },
           ),
         ),
+        leftTitles: AxisTitles(
+          axisNameWidget: Text(
+              isWeight ? "Weight (kg)" : "Height (cm)",
+              style:
+                  const TextStyle(fontSize: 11, color: Colors.grey)),
+          sideTitles: SideTitles(
+            showTitles: true,
+            interval: isWeight ? 20 : 25,
+            reservedSize: 36,
+            getTitlesWidget: (v, _) => Text("${v.toInt()}",
+                style: const TextStyle(fontSize: 10)),
+          ),
+        ),
+        topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false)),
       ),
-    );
+      lineBarsData: lines,
+      lineTouchData: LineTouchData(
+        touchTooltipData: LineTouchTooltipData(
+          getTooltipItems: (spots) => spots.map((s) {
+            if (s.barIndex == lines.length - 1) {
+              return LineTooltipItem(
+                "${_ageLabel(s.x.toInt())}\n"
+                "${isWeight ? '${s.y.toStringAsFixed(1)} kg' : '${s.y.toStringAsFixed(1)} cm'}",
+                TextStyle(
+                    color: childColor, fontWeight: FontWeight.bold),
+              );
+            }
+            return null;
+          }).toList(),
+        ),
+      ),
+    ));
   }
 
-  // ── Percentile legend ────────────────────────────────────────────────────
+  // ── Legend ────────────────────────────────────────────────────────────
 
-  Widget _percentileLegend() {
+  Widget _legend(Color childColor, String childLabel) {
     return Wrap(
-      spacing: 10,
-      runSpacing: 6,
+      spacing: 12,
+      runSpacing: 4,
       alignment: WrapAlignment.center,
       children: [
-        _legendChip(Colors.red.withOpacity(0.55), "P3"),
-        _legendChip(Colors.orange.withOpacity(0.6), "P15"),
-        _legendChip(Colors.green, "P50 (median)"),
-        _legendChip(Colors.orange.withOpacity(0.6), "P85"),
-        _legendChip(Colors.red.withOpacity(0.55), "P97"),
+        _legendItem(childColor, childLabel, false),
+        _legendItem(Colors.red.withOpacity(0.55), "P3 / P97", true),
+        _legendItem(Colors.orange.withOpacity(0.6), "P15 / P85", true),
+        _legendItem(Colors.green, "P50 (median)", true),
       ],
     );
   }
 
-  Widget _legendChip(Color color, String label) => Row(
+  Widget _legendItem(Color c, String label, bool dashed) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-              width: 20,
-              height: 3,
-              decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(2))),
+            width: 22,
+            height: 3,
+            decoration: BoxDecoration(
+              color: c,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
           const SizedBox(width: 4),
-          Text(label, style: const TextStyle(fontSize: 12)),
+          Text(label, style: const TextStyle(fontSize: 11)),
         ],
       );
 
-  // ── Summary / percentile card ────────────────────────────────────────────
+  // ── Summary card ──────────────────────────────────────────────────────
 
   Widget _summaryCard() {
     if (records.isEmpty) return const SizedBox.shrink();
-    final latest = records.last;
-    final month = (latest["month"] as num).toInt();
-    final weight = (latest["weight"] as num).toDouble();
-    final height = (latest["height"] as num).toDouble();
+    final latest  = records.last;
+    final month   = (latest["month"] as num).toInt();
+    final weight  = (latest["weight"] as num).toDouble();
+    final height  = (latest["height"] as num).toDouble();
 
-    // WHO clinical classifications
-    final wWhoTerm = _WhoData.weightForAgeLabel(month, weight, _isBoy);
-    final hWhoTerm = _WhoData.heightForAgeLabel(month, height, _isBoy);
-    // Percentile band (secondary label)
-    final wBand = _WhoData.weightPercentileLabel(month, weight, _isBoy);
-    final hBand = _WhoData.heightPercentileLabel(month, height, _isBoy);
+    final wTerm   = _RefData.weightTerm(month, weight, _isBoy);
+    final hTerm   = _RefData.heightTerm(month, height, _isBoy);
+    final wBand   = _RefData.weightBand(month, weight, _isBoy);
+    final hBand   = _RefData.heightBand(month, height, _isBoy);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -514,7 +512,7 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            "Latest Assessment — Month $month",
+            "Latest — ${_ageLabel(month)}",
             style: const TextStyle(
                 fontWeight: FontWeight.bold, fontSize: 16),
           ),
@@ -523,16 +521,16 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
             icon: Icons.monitor_weight_outlined,
             label: "Weight",
             value: "${weight.toStringAsFixed(1)} kg",
-            percentileLabel: wWhoTerm,
-            bandLabel: wBand,
+            whoTerm: wTerm,
+            band: wBand,
           ),
           const Divider(height: 20),
           _percentileRow(
             icon: Icons.height,
             label: "Height",
             value: "${height.toStringAsFixed(1)} cm",
-            percentileLabel: hWhoTerm,
-            bandLabel: hBand,
+            whoTerm: hTerm,
+            band: hBand,
           ),
           const SizedBox(height: 12),
           Container(
@@ -543,9 +541,9 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Text(
-              "Percentiles show how your child compares to 100 children "
-              "of the same age and gender. P50 is the median. "
-              "P3–P97 is considered the normal range.",
+              "Percentiles compare your child to 100 children of the "
+              "same age and gender. P3–P97 is the normal range. "
+              "Data: WHO (0–10 years) + CDC (10–18 years).",
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ),
@@ -558,12 +556,11 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
     required IconData icon,
     required String label,
     required String value,
-    required String percentileLabel, // WHO clinical term e.g. "Stunted"
-    required String bandLabel,       // Percentile band e.g. "P3–P15"
+    required String whoTerm,
+    required String band,
   }) {
-    final color = _WhoData.percentileColor(percentileLabel);
-    final advice = _WhoData.percentileInterpretation(percentileLabel);
-
+    final color  = _RefData.termColor(whoTerm);
+    final advice = _RefData.termAdvice(whoTerm);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -573,42 +570,35 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text("$label: ",
-                      style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                  Text(value,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 13)),
-                  const Spacer(),
-                  // Main WHO clinical badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.13),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      percentileLabel,
+              Row(children: [
+                Text("$label: ",
+                    style: const TextStyle(
+                        color: Colors.grey, fontSize: 13)),
+                Text(value,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13)),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.13),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(whoTerm,
                       style: TextStyle(
                           color: color,
                           fontWeight: FontWeight.bold,
-                          fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              // Percentile band as secondary info
-              Text(
-                "Percentile: $bandLabel",
-                style: TextStyle(
-                    color: Colors.grey.shade600, fontSize: 11),
-              ),
+                          fontSize: 11)),
+                ),
+              ]),
               const SizedBox(height: 3),
-              // Clinical advice
-              Text(advice, style: TextStyle(color: color, fontSize: 12)),
+              Text("Percentile: $band",
+                  style: TextStyle(
+                      color: Colors.grey.shade500, fontSize: 11)),
+              const SizedBox(height: 2),
+              Text(advice,
+                  style: TextStyle(color: color, fontSize: 12)),
             ],
           ),
         ),
@@ -616,7 +606,7 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
     );
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -628,7 +618,7 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Colors.deepPurple,
+          labelColor: const Color(0xFF2A7FC1),
           tabs: const [
             Tab(icon: Icon(Icons.monitor_weight_outlined), text: "Weight"),
             Tab(icon: Icon(Icons.height), text: "Height"),
@@ -646,20 +636,21 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
                       children: [
                         Icon(Icons.insert_chart_outlined,
                             size: 90,
-                            color: Colors.deepPurple.withOpacity(0.3)),
+                            color: const Color(0xFF2A7FC1)
+                                .withOpacity(0.3)),
                         const SizedBox(height: 20),
-                        const Text(
-                          "No growth data yet",
-                          style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold),
-                        ),
+                        const Text("No growth data yet",
+                            style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold)),
                         const SizedBox(height: 10),
                         const Text(
                           "Once measurements are added, the growth chart "
-                          "will appear here with WHO percentile bands.",
+                          "will appear here with WHO/CDC percentile bands "
+                          "covering birth to 18 years.",
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey, fontSize: 14),
+                          style: TextStyle(
+                              color: Colors.grey, fontSize: 14),
                         ),
                         const SizedBox(height: 30),
                         ElevatedButton.icon(
@@ -672,7 +663,8 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 24, vertical: 14),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
+                                borderRadius:
+                                    BorderRadius.circular(14)),
                           ),
                         ),
                       ],
@@ -686,11 +678,10 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        // ── Summary + Percentile Card ─────────────────
                         _summaryCard(),
                         const SizedBox(height: 20),
 
-                        // ── Chart Tabs ────────────────────────────────
+                        // Chart card
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.white,
@@ -704,37 +695,31 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
                           padding: const EdgeInsets.all(16),
                           child: Column(
                             children: [
-                              _percentileLegend(),
-                              const SizedBox(height: 4),
-                              // Child line indicator
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.center,
-                                children: [
-                                  Container(
-                                      width: 24,
-                                      height: 4,
-                                      decoration: BoxDecoration(
-                                          color: Colors.pinkAccent,
-                                          borderRadius:
-                                              BorderRadius.circular(2))),
-                                  const SizedBox(width: 6),
-                                  const Text("Your child",
-                                      style: TextStyle(fontSize: 12)),
-                                ],
-                              ),
-                              const SizedBox(height: 14),
                               SizedBox(
-                                height: 300,
+                                height: 320,
                                 child: TabBarView(
                                   controller: _tabController,
                                   children: [
-                                    _buildChart(
-                                        type: "weight",
-                                        childColor: Colors.pinkAccent),
-                                    _buildChart(
-                                        type: "height",
-                                        childColor: Colors.deepPurple),
+                                    Column(children: [
+                                      _legend(Colors.pinkAccent,
+                                          "Child weight"),
+                                      const SizedBox(height: 10),
+                                      Expanded(
+                                          child: _buildChart(
+                                              isWeight: true,
+                                              childColor:
+                                                  Colors.pinkAccent)),
+                                    ]),
+                                    Column(children: [
+                                      _legend(Colors.deepPurple,
+                                          "Child height"),
+                                      const SizedBox(height: 10),
+                                      Expanded(
+                                          child: _buildChart(
+                                              isWeight: false,
+                                              childColor:
+                                                  Colors.deepPurple)),
+                                    ]),
                                   ],
                                 ),
                               ),
@@ -742,7 +727,7 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
                           ),
                         ),
 
-                        // ── Records History ───────────────────────────
+                        // History
                         const SizedBox(height: 24),
                         const Align(
                           alignment: Alignment.centerLeft,
@@ -753,52 +738,78 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
                         ),
                         const SizedBox(height: 12),
                         ...records.reversed.map((r) {
-                          final month = (r["month"] as num).toInt();
+                          final month  = (r["month"] as num).toInt();
                           final weight = (r["weight"] as num).toDouble();
                           final height = (r["height"] as num).toDouble();
-                          // WHO clinical terms
-                          final wLabel = _WhoData.weightForAgeLabel(month, weight, _isBoy);
-                          final hLabel = _WhoData.heightForAgeLabel(month, height, _isBoy);
-                          // Percentile bands
-                          final wBand = _WhoData.weightPercentileLabel(month, weight, _isBoy);
-                          final hBand = _WhoData.heightPercentileLabel(month, height, _isBoy);
+                          final wTerm  =
+                              _RefData.weightTerm(month, weight, _isBoy);
+                          final hTerm  =
+                              _RefData.heightTerm(month, height, _isBoy);
+                          final wBand  =
+                              _RefData.weightBand(month, weight, _isBoy);
+                          final hBand  =
+                              _RefData.heightBand(month, height, _isBoy);
 
                           return Card(
                             shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(14)),
-                            margin:
-                                const EdgeInsets.only(bottom: 10),
+                                borderRadius: BorderRadius.circular(14)),
+                            margin: const EdgeInsets.only(bottom: 10),
                             child: Padding(
                               padding: const EdgeInsets.all(14),
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text("Month $month",
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 15)),
+                                  // ── Record header with edit/delete ──
+                                  Row(
+                                    children: [
+                                      Text(_ageLabel(month),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15)),
+                                      const Spacer(),
+                                      // Edit record
+                                      IconButton(
+                                        icon: const Icon(
+                                            Icons.edit_outlined,
+                                            size: 18,
+                                            color: Color(0xFF2A7FC1)),
+                                        tooltip: "Edit record",
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        onPressed: () => _showEditRecordDialog(
+                                            month, weight, height),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Delete record
+                                      IconButton(
+                                        icon: const Icon(
+                                            Icons.delete_outline,
+                                            size: 18,
+                                            color: Colors.redAccent),
+                                        tooltip: "Delete record",
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        onPressed: () =>
+                                            _confirmDeleteRecord(month),
+                                      ),
+                                    ],
+                                  ),
                                   const SizedBox(height: 8),
                                   Row(
                                     children: [
                                       Expanded(
-                                        child: _miniPercentileTile(
-                                          "Weight",
-                                          "${weight.toStringAsFixed(1)} kg",
-                                          wLabel,
-                                          wBand,
-                                        ),
-                                      ),
+                                          child: _miniTile(
+                                              "Weight",
+                                              "${weight.toStringAsFixed(1)} kg",
+                                              wTerm,
+                                              wBand)),
                                       const SizedBox(width: 10),
                                       Expanded(
-                                        child: _miniPercentileTile(
-                                          "Height",
-                                          "${height.toStringAsFixed(1)} cm",
-                                          hLabel,
-                                          hBand,
-                                        ),
-                                      ),
+                                          child: _miniTile(
+                                              "Height",
+                                              "${height.toStringAsFixed(1)} cm",
+                                              hTerm,
+                                              hBand)),
                                     ],
                                   ),
                                 ],
@@ -813,11 +824,140 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
     );
   }
 
-  Widget _miniPercentileTile(
-      String label, String value, String whoTerm, String bandLabel) {
-    final color = _WhoData.percentileColor(whoTerm);
+  // ── Edit growth record dialog ─────────────────────────────────────────
+
+  void _showEditRecordDialog(
+      int month, double currentWeight, double currentHeight) {
+    final weightCtrl =
+        TextEditingController(text: currentWeight.toStringAsFixed(1));
+    final heightCtrl =
+        TextEditingController(text: currentHeight.toStringAsFixed(1));
+    // Capture scaffold context before entering dialog
+    final scaffoldCtx = context;
+
+    showDialog(
+      context: scaffoldCtx,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        title: Text("Edit — ${_ageLabel(month)}"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _editField("Weight (kg)", weightCtrl, "e.g. 12.5"),
+            const SizedBox(height: 14),
+            _editField("Height (cm)", heightCtrl, "e.g. 85.0"),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final w = double.tryParse(weightCtrl.text.trim());
+              final h = double.tryParse(heightCtrl.text.trim());
+              if (w == null || h == null || w <= 0 || h <= 0) {
+                ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                  const SnackBar(
+                      content: Text("Please enter valid values.")));
+                return;
+              }
+              Navigator.pop(dialogCtx);
+              try {
+                await FirestoreService.updateGrowthRecord(
+                    widget.childId, month, w, h);
+                if (mounted) await fetchRecords();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(scaffoldCtx).showSnackBar(
+                      SnackBar(content: Text("Error: $e")));
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2A7FC1),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _editField(
+      String label, TextEditingController ctrl, String hint) {
+    return TextField(
+      controller: ctrl,
+      keyboardType:
+          const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        filled: true,
+        fillColor: Colors.grey.shade100,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  // ── Delete growth record confirmation ──────────────────────────────────
+
+  void _confirmDeleteRecord(int month) {
+    final scaffoldCtx = context;
+    showDialog(
+      context: scaffoldCtx,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        title: const Text("Delete Record"),
+        content: Text(
+            "Delete the growth record for ${_ageLabel(month)}? "
+            "This cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              try {
+                await FirestoreService.deleteGrowthRecord(
+                    widget.childId, month);
+                if (mounted) await fetchRecords();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(scaffoldCtx).showSnackBar(
+                      SnackBar(content: Text("Error: $e")));
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniTile(
+      String label, String value, String whoTerm, String band) {
+    final color = _RefData.termColor(whoTerm);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(10),
@@ -826,14 +966,15 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label,
-              style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              style: const TextStyle(
+                  color: Colors.grey, fontSize: 12)),
           Text(value,
               style: const TextStyle(
                   fontWeight: FontWeight.bold, fontSize: 14)),
           const SizedBox(height: 4),
-          // WHO clinical term badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               color: color.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
@@ -845,9 +986,9 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
                     fontWeight: FontWeight.bold)),
           ),
           const SizedBox(height: 2),
-          // Percentile band as secondary
-          Text(bandLabel,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 10)),
+          Text(band,
+              style: TextStyle(
+                  color: Colors.grey.shade500, fontSize: 10)),
         ],
       ),
     );

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../lib/screens/child_assessment_screen.dart';
+import 'package:myapp/lib/screens/child_assessment_screen.dart';
 
 void main() {
   runApp(const MyApp());
