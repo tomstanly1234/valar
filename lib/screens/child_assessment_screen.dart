@@ -26,8 +26,10 @@ class _ChildAssessmentScreenState extends State<ChildAssessmentScreen> {
   final heightController = TextEditingController();
   final monthController  = TextEditingController();
 
-  // Toggle: enter age as months or years
+  // Toggle between months and years
   bool _useYears = false;
+
+  static const Color _brandBlue = Color(0xFF2A7FC1);
 
   @override
   void dispose() {
@@ -37,7 +39,6 @@ class _ChildAssessmentScreenState extends State<ChildAssessmentScreen> {
     super.dispose();
   }
 
-  // Convert to months regardless of input mode
   int? _ageInMonths() {
     final raw = int.tryParse(monthController.text.trim());
     if (raw == null) return null;
@@ -73,20 +74,71 @@ class _ChildAssessmentScreenState extends State<ChildAssessmentScreen> {
       return;
     }
 
+    // ── Height regression check ───────────────────────────────────────
+    // Fetch existing records to validate height isn't less than
+    // the most recent previous month
     _showLoadingDialog();
+    try {
+      final snapshot =
+          await FirestoreService.getGrowthRecords(widget.childId);
+      final existing = snapshot.docs.map((d) => d.data()).toList()
+        ..sort((a, b) =>
+            (a["month"] as num).compareTo(b["month"] as num));
 
+      // Find records from months BEFORE the one being entered
+      final previousRecords = existing
+          .where((r) => (r["month"] as num).toInt() < month)
+          .toList();
+
+      if (previousRecords.isNotEmpty) {
+        final latestPrevious = previousRecords.last;
+        final prevHeight =
+            (latestPrevious["height"] as num).toDouble();
+        final prevMonth =
+            (latestPrevious["month"] as num).toInt();
+
+        if (height < prevHeight) {
+          if (mounted) Navigator.pop(context); // dismiss loading
+          _showHeightWarningDialog(
+            prevHeight: prevHeight,
+            prevMonth: prevMonth,
+            enteredHeight: height,
+            month: month,
+            weight: weight,
+          );
+          return;
+        }
+      }
+
+      // All good — save and navigate
+      await _saveAndNavigate(month, weight, height, existing);
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        _showSnack("Failed to save: $e");
+      }
+    }
+  }
+
+  Future<void> _saveAndNavigate(
+    int month,
+    double weight,
+    double height,
+    List<Map<String, dynamic>> existingRecords,
+  ) async {
     try {
       await FirestoreService.saveGrowthRecord(
           widget.childId, month, weight, height);
 
+      // Refresh records after save
       final snapshot =
           await FirestoreService.getGrowthRecords(widget.childId);
-      final records = snapshot.docs.map((doc) => doc.data()).toList()
+      final records = snapshot.docs.map((d) => d.data()).toList()
         ..sort((a, b) =>
             (a["month"] as num).compareTo(b["month"] as num));
 
       if (!mounted) return;
-      Navigator.pop(context); // dismiss dialog
+      Navigator.pop(context); // dismiss loading dialog
 
       Navigator.push(
         context,
@@ -106,6 +158,92 @@ class _ChildAssessmentScreenState extends State<ChildAssessmentScreen> {
       }
     }
   }
+
+  void _showHeightWarningDialog({
+    required double prevHeight,
+    required int prevMonth,
+    required double enteredHeight,
+    required int month,
+    required double weight,
+  }) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded,
+                color: Colors.orange, size: 24),
+            SizedBox(width: 8),
+            Text("Height Check"),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "The height entered is less than a previous record.",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            _warningRow("Previous record",
+                "${prevHeight.toStringAsFixed(1)} cm at month $prevMonth"),
+            _warningRow("Entered height",
+                "${enteredHeight.toStringAsFixed(1)} cm at month $month"),
+            const SizedBox(height: 12),
+            const Text(
+              "Height cannot decrease over time. Please check your measurement "
+              "and re-enter the correct value.",
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text("Fix Height"),
+          ),
+          ElevatedButton(
+            // Allow saving anyway (measurement errors / different device)
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              _showLoadingDialog();
+              final snapshot = await FirestoreService
+                  .getGrowthRecords(widget.childId);
+              final existing =
+                  snapshot.docs.map((d) => d.data()).toList()
+                    ..sort((a, b) => (a["month"] as num)
+                        .compareTo(b["month"] as num));
+              await _saveAndNavigate(month, weight, enteredHeight, existing);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text("Save Anyway"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _warningRow(String label, String value) => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          children: [
+            Text("$label: ",
+                style: const TextStyle(
+                    color: Colors.grey, fontSize: 13)),
+            Text(value,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 13)),
+          ],
+        ),
+      );
 
   void _showLoadingDialog() {
     showDialog(
@@ -135,7 +273,9 @@ class _ChildAssessmentScreenState extends State<ChildAssessmentScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
-          BoxShadow(blurRadius: 8, color: Colors.black.withOpacity(0.05))
+          BoxShadow(
+              blurRadius: 8,
+              color: Colors.black.withOpacity(0.05))
         ],
       ),
       child: TextField(
@@ -179,7 +319,7 @@ class _ChildAssessmentScreenState extends State<ChildAssessmentScreen> {
             ),
             const SizedBox(height: 20),
 
-            // ── Age input toggle ──────────────────────────────────────
+            // ── Age toggle ────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
@@ -198,10 +338,11 @@ class _ChildAssessmentScreenState extends State<ChildAssessmentScreen> {
                       onTap: () => setState(() => _useYears = false),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(
                           color: !_useYears
-                              ? const Color(0xFF2A7FC1)
+                              ? _brandBlue
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -224,10 +365,11 @@ class _ChildAssessmentScreenState extends State<ChildAssessmentScreen> {
                       onTap: () => setState(() => _useYears = true),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(
                           color: _useYears
-                              ? const Color(0xFF2A7FC1)
+                              ? _brandBlue
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -263,13 +405,28 @@ class _ChildAssessmentScreenState extends State<ChildAssessmentScreen> {
 
             const SizedBox(height: 8),
 
-            // Helper note
-            Text(
-              _useYears
-                  ? "Tip: 18 years = 216 months"
-                  : "Tip: You can also switch to entering age in years above.",
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
-              textAlign: TextAlign.center,
+            // Height note
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _brandBlue.withOpacity(0.07),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      size: 16, color: Color(0xFF2A7FC1)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Height must be equal to or greater than previous records. "
+                      "A child's height cannot decrease over time.",
+                      style: TextStyle(
+                          fontSize: 12, color: Color(0xFF2A7FC1)),
+                    ),
+                  ),
+                ],
+              ),
             ),
 
             const SizedBox(height: 24),

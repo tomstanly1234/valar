@@ -239,6 +239,20 @@ class _RefData {
         .toList()
       ..sort((a, b) => a.x.compareTo(b.x));
   }
+
+  /// Returns the WHO P50 (median) reference values for a given age.
+  /// Returns [weight_kg, height_cm] at the median (P50).
+  static List<double> p50Reference(int month, bool isBoy) {
+    final wTable = isBoy ? weightBoys : weightGirls;
+    final hTable = isBoy ? heightBoys : heightGirls;
+
+    final wCm = wTable.keys.reduce(
+        (a, b) => (a - month).abs() < (b - month).abs() ? a : b);
+    final hCm = hTable.keys.reduce(
+        (a, b) => (a - month).abs() < (b - month).abs() ? a : b);
+
+    return [wTable[wCm]![2], hTable[hCm]![2]]; // index 2 = P50
+  }
 }
 
 // ── Age label helper ──────────────────────────────────────────────────────
@@ -749,6 +763,10 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
                               _RefData.weightBand(month, weight, _isBoy);
                           final hBand  =
                               _RefData.heightBand(month, height, _isBoy);
+                          // WHO P50 reference for this age
+                          final ref    = _RefData.p50Reference(month, _isBoy);
+                          final refW   = ref[0];
+                          final refH   = ref[1];
 
                           return Card(
                             shape: RoundedRectangleBorder(
@@ -811,6 +829,35 @@ class _GrowthAnalysisScreenState extends State<GrowthAnalysisScreen>
                                               hTerm,
                                               hBand)),
                                     ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // WHO reference row
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2A7FC1)
+                                          .withOpacity(0.07),
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                            Icons.info_outline,
+                                            size: 14,
+                                            color: Color(0xFF2A7FC1)),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          "WHO median for ${_ageLabel(month)}:  "
+                                          "${refW.toStringAsFixed(1)} kg  •  "
+                                          "${refH.toStringAsFixed(1)} cm",
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF2A7FC1)),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),

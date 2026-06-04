@@ -8,12 +8,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
   options: const FirebaseOptions(
-    apiKey:           "",
-    authDomain:        "",
-    projectId:         "",
-    storageBucket:     "",
-    messagingSenderId: "",
-    appId:             "",
+    apiKey:           "AIzaSyD-ABzev-hklM2Dq4J9bv8bNVLN4ng3Ltw",
+    authDomain:        "nutritrack-66125.firebaseapp.com",
+    projectId:         "nutritrack-66125",
+    storageBucket:     "nutritrack-66125.appspot.com",
+    messagingSenderId: "655679523222",
+    appId:             "1:655679523222:web:516ad4234e8b040383b5b7",
   ),
 );
   FirebaseFirestore.instance.settings = const Settings(
